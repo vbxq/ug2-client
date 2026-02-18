@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UG2 - Build Selector</title>
+<link rel="stylesheet" href="/static/selector.css">
+</head>
+<body>
+
+<div id="main-container">
+
+    <img class="main-image" src="https://i.imgur.com/X5aUTBQ.png" alt="" />
+    <h1 class="title">UG2 - Build Selector</h1>
+    <p class="header-sub">Download, patch, and activate Discord builds</p>
+
+    <ul class="nav">
+        <li><a href="/">client</a></li>
+        <li><a href="/selector" class="selected">selector</a></li>
+    </ul>
+
+    <!-- Status -->
+    <div class="status-block" id="statusBar">
+        <div class="blob inactive" id="statusDot"></div>
+        <span class="status-text" id="statusText">Loading...</span>
+    </div>
+
+    <div class="content-wrap">
+        <div class="wrapper-header">Builds</div>
+
+        <div class="controls">
+            <input type="text" class="search-input" id="search" placeholder="Search by build hash..." />
+            <select class="filter-select" id="filterPatched">
+                <option value="">All builds</option>
+                <option value="patched">Patched</option>
+                <option value="pending">Not patched</option>
+            </select>
+            <button class="button button-ghost" id="refreshBtn" onclick="loadBuilds()">Refresh</button>
+            <button class="button button-primary" id="fetchCurrentBtn" onclick="fetchCurrentBuild()">Fetch Current Build</button>
+        </div>
+
+        <div class="table-block">
+            <table class="builds-table">
+                <thead>
+                    <tr>
+                        <th>Build Hash</th>
+                        <th>Channel</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="buildsBody">
+                    <tr><td colspan="5">
+                        <div class="loading-state">
+                            <div class="spinner"></div>
+                            <span>Loading builds...</span>
+                        </div>
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination" id="pagination"></div>
+    </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/static/selector.js"></script>
+</body>
+</html>

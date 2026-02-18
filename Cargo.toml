@@ -1,0 +1,23 @@
+[package]
+name = "ug2-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["fs", "compression-gzip", "cors"] }
+sea-orm = { version = "1.1", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
+reqwest = { version = "0.12", features = ["json", "gzip"] }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+regex = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dotenvy = "0.15"
+bytes = "1"
+chrono = { version = "0.4", features = ["serde"] }
+indicatif = "0.17"

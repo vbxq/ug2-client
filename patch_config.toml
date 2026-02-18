@@ -1,0 +1,38 @@
+[patches]
+# Branding patches, disable for testing with real Discord
+nitro_rebranding = true
+discord_rebranding = true
+title_rebranding = true
+server_to_guild = true
+
+# Infrastructure patches, disable for testing
+sentry_redirect = false
+status_page_redirect = false
+
+# Functional patches
+prevent_localstorage_deletion = true
+fast_identify = true
+gateway_reconnect = true
+remove_qr_login = true
+enable_dev_experiments = true
+remove_modals = true
+no_xss_warning = true
+# TODO: vencord integratio
+vencord = false
+
+# When enabled, proxies /api/* requests to Discord (avoids CORS in browsers).
+# Disable this when using an alternative backend on the same host.
+api_proxy = true
+
+[server]
+trust_proxy_headers = false
+rate_limit_enabled = false
+rate_limit_requests = 60
+rate_limit_window_secs = 60
+
+[branding]
+instance_name = "Discord"
+instance_url = "https://canary.discord.com"
+gateway_url = "wss://gateway.discord.gg"
+sentry_url = "https://sentry.io"
+status_url = "status.discord.com"

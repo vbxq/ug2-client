@@ -1,0 +1,7 @@
+/target
+/assets/cache
+.env
+*.swp
+*.swo
+.idea/
+nul
