@@ -21,3 +21,4 @@ dotenvy = "0.15"
 bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 indicatif = "0.17"
+mimalloc = "0.1"

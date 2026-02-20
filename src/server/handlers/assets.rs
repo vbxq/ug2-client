@@ -29,7 +29,7 @@ pub async fn serve_asset(
     }
 
     let url = format!("{}/assets/{}", state.config.discord_base_url, asset_name);
-    match reqwest::get(&url).await {
+    match state.http_client.get(&url).send().await {
         Ok(resp) if resp.status().is_success() => {
             if let Ok(bytes) = resp.bytes().await {
                 let is_patchable = asset_name.ends_with(".js") || asset_name.ends_with(".css");

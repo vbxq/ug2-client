@@ -19,14 +19,7 @@ pub struct AssetDownloader {
 }
 
 impl AssetDownloader {
-    pub fn new(cache_path: PathBuf, base_url: &str) -> Self {
-        let client = Client::builder()
-            .pool_max_idle_per_host(50)
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            .gzip(true)
-            .build()
-            .expect("Failed to build HTTP client");
-
+    pub fn new(client: Client, cache_path: PathBuf, base_url: &str) -> Self {
         Self {
             client,
             cache_path,

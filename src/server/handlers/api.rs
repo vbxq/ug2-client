@@ -104,6 +104,7 @@ pub async fn download_build(
     let pipeline = state.pipeline.clone();
     let fs_cache = state.fs_cache.clone();
     let mut redis = state.redis.clone();
+    let http_client = state.http_client.clone();
     let build_hash = info.build_hash.clone();
     let resp_hash = build_hash.clone();
 
@@ -111,7 +112,7 @@ pub async fn download_build(
         tracing::info!("Starting download for build {} ({} scripts)", build_hash, info.scripts.len());
 
         let downloader =
-            AssetDownloader::new(config.cache_path.clone(), &config.discord_base_url);
+            AssetDownloader::new(http_client, config.cache_path.clone(), &config.discord_base_url);
         match downloader
             .download_build(&build_hash, &info.scripts)
             .await
@@ -223,6 +224,7 @@ pub async fn fetch_current_build(State(state): State<AppState>) -> Response {
     let pipeline = state.pipeline.clone();
     let fs_cache = state.fs_cache.clone();
     let mut redis = state.redis.clone();
+    let http_client = state.http_client.clone();
 
     tokio::spawn(async move {
         tracing::info!(
@@ -232,7 +234,7 @@ pub async fn fetch_current_build(State(state): State<AppState>) -> Response {
         );
 
         let downloader =
-            AssetDownloader::new(config.cache_path.clone(), &config.discord_base_url);
+            AssetDownloader::new(http_client, config.cache_path.clone(), &config.discord_base_url);
         match downloader
             .download_build(&build_hash, &live.scripts)
             .await
