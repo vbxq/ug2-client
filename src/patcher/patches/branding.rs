@@ -13,7 +13,10 @@ impl NitroRebranding {
 impl Patch for NitroRebranding {
     fn name(&self) -> &str { "nitro_rebranding" }
 
-    fn apply(&self, content: &str) -> String {
+    fn apply(&self, content: String) -> String {
+        if !content.contains("Nitro") {
+            return content;
+        }
         let name = &self.instance_name;
         content
             .replace("Discord Nitro", &format!("{} Premium", name))
@@ -39,7 +42,10 @@ impl DiscordRebranding {
 impl Patch for DiscordRebranding {
     fn name(&self) -> &str { "discord_rebranding" }
 
-    fn apply(&self, content: &str) -> String {
+    fn apply(&self, content: String) -> String {
+        if !content.contains("Discord") {
+            return content;
+        }
         let name = &self.instance_name;
         content
             .replace(" Discord ", &format!(" {} ", name))
@@ -63,7 +69,10 @@ impl TitleRebranding {
 impl Patch for TitleRebranding {
     fn name(&self) -> &str { "title_rebranding" }
 
-    fn apply(&self, content: &str) -> String {
+    fn apply(&self, content: String) -> String {
+        if !content.contains("isPlatformEmbedded") {
+            return content;
+        }
         content.replace(
             r#"isPlatformEmbedded?void 0:"Discord""#,
             &format!(r#"isPlatformEmbedded?void 0:"{}""#, self.instance_name),
@@ -76,7 +85,11 @@ pub struct ServerToGuild;
 impl Patch for ServerToGuild {
     fn name(&self) -> &str { "server_to_guild" }
 
-    fn apply(&self, content: &str) -> String {
+    fn apply(&self, content: String) -> String {
+        if !content.contains("Server") && !content.contains("server") {
+            return content;
+        }
+
         let replacements: &[(&str, &str)] = &[
             ("\"Server\"", "\"Guild\""),
             ("\"Server ", "\"Guild "),
@@ -99,7 +112,7 @@ impl Patch for ServerToGuild {
             ("\nServers", "\nGuilds"),
         ];
 
-        let mut result = content.to_string();
+        let mut result = content;
         for (from, to) in replacements {
             result = result.replace(from, to);
             result = result.replace(&from.to_lowercase(), &to.to_lowercase());

@@ -3,6 +3,31 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::sync::LazyLock;
 
+fn safe_slice_start(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    // Find the closest char boundary <= max_bytes
+    let mut idx = max_bytes;
+    while idx > 0 && !s.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    &s[..idx]
+}
+
+fn safe_slice_end(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let start = s.len() - max_bytes;
+    // Find the closest char boundary >= start
+    let mut idx = start;
+    while idx < s.len() && !s.is_char_boundary(idx) {
+        idx += 1;
+    }
+    &s[idx..]
+}
+
 static CHUNK_IDS_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\.push\(\[\[(\d+(?:,\d+)*)\]").unwrap()
 });
@@ -95,20 +120,12 @@ pub fn detect_entry_scripts(build_dir: &Path, ordered_scripts: &[String]) -> Vec
 }
 
 pub fn is_webpack_chunk(content: &str) -> bool {
-    let head: &str = if content.len() > 500 {
-        &content[..500]
-    } else {
-        content
-    };
+    let head = safe_slice_start(content, 500);
     head.contains("webpackChunk") && head.contains(".push(")
 }
 
 pub fn extract_chunk_ids(content: &str) -> Vec<u64> {
-    let head: &str = if content.len() > 2000 {
-        &content[..2000]
-    } else {
-        content
-    };
+    let head = safe_slice_start(content, 2000);
     if let Some(cap) = CHUNK_IDS_RE.captures(head) {
         if let Some(m) = cap.get(1) {
             return m
@@ -133,11 +150,7 @@ pub fn has_entry_factory(tail: &str) -> bool {
         return false;
     }
 
-    let check_region = if trimmed.len() > 500 {
-        &trimmed[trimmed.len() - 500..]
-    } else {
-        trimmed
-    };
+    let check_region = safe_slice_end(trimmed, 500);
 
     if DEFERRED_DEPS_RE.is_match(check_region) {
         return true;

@@ -11,6 +11,20 @@ use sea_orm::prelude::Expr;
 use sea_orm::*;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, FromQueryResult)]
+struct BuildSummary {
+    build_hash: String,
+    channel: String,
+    is_patched: bool,
+    is_active: bool,
+    build_date: chrono::DateTime<chrono::FixedOffset>,
+}
+
+#[derive(Debug, FromQueryResult)]
+struct ScriptsOnly {
+    scripts: serde_json::Value,
+}
+
 #[derive(Deserialize)]
 pub struct DownloadRequest {
     pub build_hash: Option<String>,
@@ -179,7 +193,6 @@ pub async fn download_build(
                     tracing::error!("Failed to save build to DB: {}", e);
                 }
 
-                let _ = redis_cache::invalidate_build(&mut redis, &build_hash).await;
                 let _ = redis_cache::invalidate_builds_cache(&mut redis).await;
                 tracing::info!("Build {} ready! Detected {} entry scripts", build_hash, index_scripts.len());
             }
@@ -287,7 +300,6 @@ pub async fn fetch_current_build(State(state): State<AppState>) -> Response {
                     tracing::error!("Failed to save build to DB: {}", e);
                 }
 
-                let _ = redis_cache::invalidate_build(&mut redis, &build_hash).await;
                 let _ = redis_cache::invalidate_builds_cache(&mut redis).await;
                 tracing::info!("Build {} ready!", build_hash);
             }
@@ -322,16 +334,23 @@ pub async fn list_builds(State(state): State<AppState>) -> Response {
     }
 
     match discord_build::Entity::find()
+        .select_only()
+        .column(discord_build::Column::BuildHash)
+        .column(discord_build::Column::Channel)
+        .column(discord_build::Column::IsPatched)
+        .column(discord_build::Column::IsActive)
+        .column(discord_build::Column::BuildDate)
         .order_by_desc(discord_build::Column::BuildDate)
+        .into_model::<BuildSummary>()
         .all(&state.db)
         .await
     {
         Ok(builds) => {
             let response: Vec<BuildResponse> = builds
-                .iter()
+                .into_iter()
                 .map(|b| BuildResponse {
-                    build_hash: b.build_hash.clone(),
-                    channel: b.channel.clone(),
+                    build_hash: b.build_hash,
+                    channel: b.channel,
                     is_patched: b.is_patched,
                     is_active: b.is_active,
                     build_date: b.build_date.to_string(),
@@ -376,8 +395,6 @@ pub async fn set_active_build(
             *state.active_build.write().await = Some(req.build_hash.clone());
 
             let mut redis = state.redis.clone();
-            let _ =
-                crate::cache::redis_cache::invalidate_build(&mut redis, &req.build_hash).await;
             let _ = redis_cache::invalidate_builds_cache(&mut redis).await;
 
             Json(StatusResponse {
@@ -419,9 +436,6 @@ pub async fn set_index_scripts(
 
     match result {
         Ok(res) if res.rows_affected > 0 => {
-            let mut redis = state.redis.clone();
-            let _ = crate::cache::redis_cache::invalidate_build(&mut redis, &build_hash).await;
-
             Json(StatusResponse {
                 status: "ok".into(),
                 message: format!(
@@ -453,15 +467,17 @@ pub async fn repatch_build(
     let hash = build_hash.clone();
 
     let scripts: Vec<String> = match discord_build::Entity::find()
+        .select_only()
+        .column(discord_build::Column::Scripts)
         .filter(discord_build::Column::BuildHash.eq(&build_hash))
+        .into_model::<ScriptsOnly>()
         .one(&state.db)
         .await
     {
-        Ok(Some(build)) => serde_json::from_value(build.scripts).unwrap_or_default(),
+        Ok(Some(row)) => serde_json::from_value(row.scripts).unwrap_or_default(),
         _ => Vec::new(),
     };
 
-    let _ = redis_cache::invalidate_build(&mut redis, &build_hash).await;
     let _ = redis_cache::invalidate_builds_cache(&mut redis).await;
 
     tokio::spawn(async move {

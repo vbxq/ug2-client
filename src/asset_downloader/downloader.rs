@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-const MAX_CONCURRENT: usize = 100;
+const MAX_CONCURRENT: usize = 20;
 const MAX_RETRIES: u32 = 3;
 
 pub struct AssetDownloader {

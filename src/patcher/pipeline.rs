@@ -4,7 +4,7 @@ use std::path::Path;
 
 pub trait Patch: Send + Sync {
     fn name(&self) -> &str;
-    fn apply(&self, content: &str) -> String;
+    fn apply(&self, content: String) -> String;
 }
 
 pub struct PatchPipeline {
@@ -61,7 +61,7 @@ impl PatchPipeline {
     pub fn patch_content(&self, content: &str) -> String {
         let mut result = content.to_string();
         for patch in &self.patches {
-            result = patch.apply(&result);
+            result = patch.apply(result);
         }
         result
     }
@@ -69,6 +69,7 @@ impl PatchPipeline {
     pub async fn patch_build(&self, build_dir: &Path) -> Result<u32> {
         let mut count = 0u32;
         let mut entries = tokio::fs::read_dir(build_dir).await?;
+        let mut file_count = 0u32;
 
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
@@ -81,6 +82,12 @@ impl PatchPipeline {
                     tokio::fs::write(&path, patched).await?;
                     count += 1;
                     tracing::debug!("Patched: {}", name);
+                }
+
+                file_count += 1;
+                // Yield to runtime every 10 files to allow allocator to reclaim memory
+                if file_count % 10 == 0 {
+                    tokio::task::yield_now().await;
                 }
             }
         }

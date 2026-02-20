@@ -57,16 +57,7 @@ If you already cloned without `--recurse-submodules`:
 ```bash
 git submodule update --init
 ```
-
-**4.** Build and run:
-
-```bash
-cargo run --release
-```
-
-**5.** Open `http://localhost:3000/selector`, pick a build, and enjoy.
-
-### Importing historical builds
+**4.** **Importing historical builds**
 
 The repo includes [Discord-Build-Logger/Builds](https://github.com/Discord-Build-Logger/Builds) as a git submodule in `data/builds-repo/`. It contains archived Discord builds from 2022-2023.
 
@@ -75,6 +66,16 @@ To index them into your database:
 ```bash
 cargo run -- import .\data\builds-repo\
 ```
+
+**5.** Build and run:
+
+```bash
+cargo run --release
+```
+
+**6.** Open `http://localhost:3000/selector`, pick a build, and enjoy.
+
+
 
 You can also skip this and use the "Fetch Current Build" button in the selector to grab the latest live build directly.
 
