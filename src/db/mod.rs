@@ -1,10 +1,14 @@
 pub mod models;
 
 use anyhow::Result;
-use sea_orm::{Database, DatabaseConnection, ConnectionTrait};
+use sea_orm::{ConnectOptions, Database, DatabaseConnection, ConnectionTrait};
 
 pub async fn connect(database_url: &str) -> Result<DatabaseConnection> {
-    let db = Database::connect(database_url).await?;
+    let mut opts = ConnectOptions::new(database_url);
+    opts.max_connections(10)
+        .min_connections(1)
+        .idle_timeout(std::time::Duration::from_secs(300));
+    let db = Database::connect(opts).await?;
     tracing::info!("Connected to database");
     Ok(db)
 }

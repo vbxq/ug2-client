@@ -11,10 +11,13 @@ static LS_DELETE_RE: LazyLock<Regex> = LazyLock::new(|| {
 impl Patch for PreventLocalStorageDeletion {
     fn name(&self) -> &str { "prevent_localstorage_deletion" }
 
-    fn apply(&self, content: &str) -> String {
+    fn apply(&self, content: String) -> String {
+        if !LS_DELETE_RE.is_match(&content) {
+            return content;
+        }
         LS_DELETE_RE
-            .replace_all(content, "void 0")
-            .to_string()
+            .replace_all(&content, "void 0")
+            .into_owned()
     }
 }
 
@@ -23,7 +26,10 @@ pub struct FastIdentifyFix;
 impl Patch for FastIdentifyFix {
     fn name(&self) -> &str { "fast_identify" }
 
-    fn apply(&self, content: &str) -> String {
+    fn apply(&self, content: String) -> String {
+        if !content.contains("_doFastConnectIdentify") {
+            return content;
+        }
         content.replace(
             "?this._doFastConnectIdentify():this._doResumeOrIdentify()",
             "?this._doResumeOrIdentify():this._doResumeOrIdentify()",
@@ -40,10 +46,13 @@ static RECONNECT_RE: LazyLock<Regex> = LazyLock::new(|| {
 impl Patch for GatewayReconnectPatch {
     fn name(&self) -> &str { "gateway_reconnect" }
 
-    fn apply(&self, content: &str) -> String {
+    fn apply(&self, content: String) -> String {
+        if !RECONNECT_RE.is_match(&content) {
+            return content;
+        }
         RECONNECT_RE
-            .replace_all(content, "${1}isFastConnect=!0")
-            .to_string()
+            .replace_all(&content, "${1}isFastConnect=!0")
+            .into_owned()
     }
 }
 
@@ -56,8 +65,11 @@ static QR_CODE_RE: LazyLock<Regex> = LazyLock::new(|| {
 impl Patch for RemoveQrCodeLogin {
     fn name(&self) -> &str { "remove_qr_login" }
 
-    fn apply(&self, content: &str) -> String {
-        QR_CODE_RE.replace_all(content, "null").to_string()
+    fn apply(&self, content: String) -> String {
+        if !QR_CODE_RE.is_match(&content) {
+            return content;
+        }
+        QR_CODE_RE.replace_all(&content, "null").into_owned()
     }
 }
 
@@ -70,9 +82,12 @@ static SELF_XSS_RE: LazyLock<Regex> = LazyLock::new(|| {
 impl Patch for NoXssWarning {
     fn name(&self) -> &str { "no_xss_warning" }
 
-    fn apply(&self, content: &str) -> String {
+    fn apply(&self, content: String) -> String {
+        if !SELF_XSS_RE.is_match(&content) {
+            return content;
+        }
         SELF_XSS_RE
-            .replace_all(content, "false")
-            .to_string()
+            .replace_all(&content, "false")
+            .into_owned()
     }
 }

@@ -21,3 +21,5 @@ dotenvy = "0.15"
 bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 indicatif = "0.17"
+mimalloc = { version = "0.1", features = ["extended"] }
+tokio-util = { version = "0.7", features = ["io"] }

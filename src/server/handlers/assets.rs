@@ -1,8 +1,9 @@
-use crate::cache::redis_cache;
 use crate::server::state::AppState;
+use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use tokio_util::io::ReaderStream;
 
 pub async fn serve_asset(
     State(state): State<AppState>,
@@ -17,19 +18,17 @@ pub async fn serve_asset(
 
     let cache_headers = asset_cache_headers(&asset_name);
 
-    let cache_key = redis_cache::asset_key(&build_hash, &asset_name);
-    let mut redis = state.redis.clone();
-    if let Ok(Some(data)) = redis_cache::get_cached_asset(&mut redis, &cache_key).await {
-        return (cache_headers, data).into_response();
+    // 1. Stream from filesystem — files are already patched on disk, zero RAM
+    let path = state.fs_cache.build_dir(&build_hash).join(&asset_name);
+    if let Ok(file) = tokio::fs::File::open(&path).await {
+        let stream = ReaderStream::new(file);
+        let body = Body::from_stream(stream);
+        return (cache_headers, body).into_response();
     }
 
-    if let Ok(Some(data)) = state.fs_cache.get_asset(&build_hash, &asset_name).await {
-        let _ = redis_cache::cache_asset(&mut redis, &cache_key, &data).await;
-        return (cache_headers, data).into_response();
-    }
-
+    // 2. Fallback: fetch from Discord, patch on the fly, save to disk for future streaming
     let url = format!("{}/assets/{}", state.config.discord_base_url, asset_name);
-    match reqwest::get(&url).await {
+    match state.http_client.get(&url).send().await {
         Ok(resp) if resp.status().is_success() => {
             if let Ok(bytes) = resp.bytes().await {
                 let is_patchable = asset_name.ends_with(".js") || asset_name.ends_with(".css");
@@ -40,7 +39,6 @@ pub async fn serve_asset(
                 } else {
                     bytes.to_vec()
                 };
-                let _ = redis_cache::cache_asset(&mut redis, &cache_key, &data).await;
                 let _ = state.fs_cache.put_asset(&build_hash, &asset_name, &data).await;
                 return (cache_headers, data).into_response();
             }

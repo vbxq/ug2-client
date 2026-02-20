@@ -45,7 +45,13 @@ pub async fn run(
         fs_cache,
         pipeline,
         active_build: Arc::new(RwLock::new(active_build)),
-        http_client: reqwest::Client::new(),
+        http_client: reqwest::Client::builder()
+            .pool_max_idle_per_host(20)
+            .pool_idle_timeout(std::time::Duration::from_secs(30))
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .gzip(true)
+            .build()
+            .expect("Failed to build HTTP client"),
         proxy_semaphore: Arc::new(tokio::sync::Semaphore::new(50)),
     };
 

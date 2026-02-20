@@ -5,7 +5,7 @@ use ug2_client::patcher::patches::experiments::EnableDevExperiments;
 fn test_dev_experiments() {
     let patch = EnableDevExperiments;
     let input = r#"static displayName="DeveloperExperimentStore";isDeveloper=!1;initialize()"#;
-    let result = patch.apply(input);
+    let result = patch.apply(input.into());
     assert!(result.contains("isDeveloper=!0"));
     assert!(!result.contains("isDeveloper=!1"));
 }
