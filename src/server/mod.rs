@@ -15,6 +15,7 @@ use state::AppState;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio_util::task::TaskTracker;
 
 pub async fn run(
     config: AppConfig,
@@ -25,6 +26,7 @@ pub async fn run(
 
     let fs_cache = Arc::new(FsCache::new(config.cache_path.clone()));
     let pipeline = Arc::new(PatchPipeline::new(&config.patch_config));
+    let task_tracker = TaskTracker::new();
 
     let active_build = discord_build::Entity::find()
         .filter(discord_build::Column::IsActive.eq(true))
@@ -53,6 +55,7 @@ pub async fn run(
             .build()
             .expect("Failed to build HTTP client"),
         proxy_semaphore: Arc::new(tokio::sync::Semaphore::new(50)),
+        task_tracker: task_tracker.clone(),
     };
 
     let app = routes::build_router(state);
@@ -62,6 +65,12 @@ pub async fn run(
     axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown_signal())
         .await?;
+
+    // The HTTP server has stopped accepting connections and finished in-flight requests; now wait for any background download tasks to complete so we don't leave partial files on disk.
+    tracing::info!("HTTP server stopped, waiting for background download tasks...");
+    task_tracker.close();
+    task_tracker.wait().await;
+    tracing::info!("All tasks complete, shutting down.");
 
     Ok(())
 }

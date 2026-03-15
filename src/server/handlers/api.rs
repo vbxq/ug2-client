@@ -122,7 +122,7 @@ pub async fn download_build(
     let build_hash = info.build_hash.clone();
     let resp_hash = build_hash.clone();
 
-    tokio::spawn(async move {
+    state.task_tracker.spawn(async move {
         tracing::info!("Starting download for build {} ({} scripts)", build_hash, info.scripts.len());
 
         let downloader =
@@ -239,7 +239,7 @@ pub async fn fetch_current_build(State(state): State<AppState>) -> Response {
     let mut redis = state.redis.clone();
     let http_client = state.http_client.clone();
 
-    tokio::spawn(async move {
+    state.task_tracker.spawn(async move {
         tracing::info!(
             "Fetching current build {} ({} entry scripts)",
             build_hash,
@@ -480,7 +480,7 @@ pub async fn repatch_build(
 
     let _ = redis_cache::invalidate_builds_cache(&mut redis).await;
 
-    tokio::spawn(async move {
+    state.task_tracker.spawn(async move {
         match pipeline.patch_build(&build_dir).await {
             Ok(count) => tracing::info!("Repatched {} files for build {}", count, hash),
             Err(e) => tracing::error!("Repatching failed: {}", e),

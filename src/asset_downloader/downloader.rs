@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-const MAX_CONCURRENT: usize = 20;
+const MAX_CONCURRENT: usize = 64;
 const MAX_RETRIES: u32 = 3;
 
 pub struct AssetDownloader {
@@ -92,7 +92,6 @@ impl AssetDownloader {
         pb.finish_with_message(format!("Done! {} assets downloaded", downloaded.len()));
         Ok(downloaded)
     }
-
 }
 
 async fn download_single_asset(
@@ -115,41 +114,58 @@ async fn download_single_asset(
     let bytes = download_with_retry(client, &url, MAX_RETRIES).await?;
 
     let is_text = asset_name.ends_with(".js") || asset_name.ends_with(".css");
+
+    let tmp_dest = build_dir.join(format!("{}.tmp", asset_name));
+    tokio::fs::write(&tmp_dest, &bytes).await?;
+    tokio::fs::rename(&tmp_dest, &dest).await?;
+
     if !is_text {
-        tokio::fs::write(&dest, &bytes).await?;
         return Ok(vec![]);
     }
 
     let content = String::from_utf8_lossy(&bytes);
-    let refs: Vec<String> = extractor::extract_asset_refs(&content).into_iter().collect();
-    tokio::fs::write(&dest, bytes).await?;
-
-    Ok(refs)
+    Ok(extractor::extract_asset_refs(&content).into_iter().collect())
 }
 
 async fn download_with_retry(client: &Client, url: &str, max_retries: u32) -> Result<Bytes> {
     let mut last_err = None;
 
     for attempt in 0..=max_retries {
-        if attempt > 0 {
-            let delay = std::time::Duration::from_millis(500 * 2u64.pow(attempt - 1));
-            tokio::time::sleep(delay).await;
-        }
-
         match client.get(url).send().await {
             Ok(resp) => {
                 if resp.status() == reqwest::StatusCode::NOT_FOUND {
+                    let _ = resp.bytes().await;
                     anyhow::bail!("404 Not Found: {}", url);
                 }
                 let resp = resp.error_for_status()?;
                 return Ok(resp.bytes().await?);
             }
             Err(e) => {
-                tracing::debug!("Attempt {} failed for {}: {}", attempt + 1, url, e);
+                let delay = if is_emfile_error(&e) {
+                    tracing::debug!(
+                        "EMFILE on attempt {}/{} for {}, backing off",
+                        attempt + 1, max_retries + 1, url
+                    );
+                    std::time::Duration::from_secs(1 + attempt as u64)
+                } else {
+                    tracing::debug!(
+                        "Attempt {}/{} failed for {}: {}",
+                        attempt + 1, max_retries + 1, url, e
+                    );
+                    std::time::Duration::from_millis(500 * 2u64.pow(attempt))
+                };
+                if attempt < max_retries {
+                    tokio::time::sleep(delay).await;
+                }
                 last_err = Some(e);
             }
         }
     }
 
     Err(last_err.unwrap().into())
+}
+
+fn is_emfile_error(e: &reqwest::Error) -> bool {
+    let s = e.to_string();
+    s.contains("os error 24") || s.contains("Too many open files")
 }

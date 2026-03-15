@@ -5,6 +5,7 @@ use redis::aio::ConnectionManager;
 use sea_orm::DatabaseConnection;
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
+use tokio_util::task::TaskTracker;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -16,4 +17,6 @@ pub struct AppState {
     pub active_build: Arc<RwLock<Option<String>>>,
     pub http_client: reqwest::Client,
     pub proxy_semaphore: Arc<Semaphore>,
+    /// Tracks background download tasks so graceful shutdown can wait for them.
+    pub task_tracker: TaskTracker,
 }
