@@ -9,6 +9,7 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 
 const MAX_CONCURRENT: usize = 64;
+const MAX_FILE_IO: usize = 16;
 const MAX_RETRIES: u32 = 3;
 
 pub struct AssetDownloader {
@@ -16,15 +17,26 @@ pub struct AssetDownloader {
     cache_path: PathBuf,
     base_url: String,
     semaphore: Arc<Semaphore>,
+    io_semaphore: Arc<Semaphore>,
 }
 
 impl AssetDownloader {
-    pub fn new(client: Client, cache_path: PathBuf, base_url: &str) -> Self {
+    pub fn new(cache_path: PathBuf, base_url: &str) -> Self {
+        let client = reqwest::Client::builder()
+            .pool_max_idle_per_host(4)
+            .pool_idle_timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(30))
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .gzip(true)
+            .build()
+            .expect("Failed to build downloader HTTP client");
+
         Self {
             client,
             cache_path,
             base_url: base_url.to_string(),
             semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT)),
+            io_semaphore: Arc::new(Semaphore::new(MAX_FILE_IO)),
         }
     }
 
@@ -62,10 +74,11 @@ impl AssetDownloader {
                 let base_url = self.base_url.clone();
                 let build_dir = build_dir.clone();
                 let sem = self.semaphore.clone();
+                let io_sem = self.io_semaphore.clone();
 
                 handles.push(tokio::spawn(async move {
                     let _permit = sem.acquire().await.unwrap();
-                    let result = download_single_asset(&client, &base_url, &asset_name, &build_dir).await;
+                    let result = download_single_asset(&client, &base_url, &asset_name, &build_dir, io_sem).await;
                     (asset_name, result)
                 }));
             }
@@ -99,6 +112,7 @@ async fn download_single_asset(
     base_url: &str,
     asset_name: &str,
     build_dir: &Path,
+    io_sem: Arc<Semaphore>,
 ) -> Result<Vec<String>> {
     let url = format!("{}/assets/{}", base_url, asset_name);
     let dest = build_dir.join(asset_name);
@@ -114,10 +128,31 @@ async fn download_single_asset(
     let bytes = download_with_retry(client, &url, MAX_RETRIES).await?;
 
     let is_text = asset_name.ends_with(".js") || asset_name.ends_with(".css");
-
     let tmp_dest = build_dir.join(format!("{}.tmp", asset_name));
-    tokio::fs::write(&tmp_dest, &bytes).await?;
+
+    let _io_permit = io_sem.acquire().await.unwrap();
+
+    for write_attempt in 0..=2u32 {
+        match tokio::fs::write(&tmp_dest, &bytes).await {
+            Ok(()) => break,
+            Err(e) if e.raw_os_error() == Some(24) => {
+                if write_attempt < 2 {
+                    tracing::debug!("EMFILE writing {} (attempt {}/3), retrying", asset_name, write_attempt + 1);
+                    tokio::time::sleep(std::time::Duration::from_secs(1 + write_attempt as u64)).await;
+                } else {
+                    let _ = tokio::fs::remove_file(&tmp_dest).await;
+                    return Err(e.into());
+                }
+            }
+            Err(e) => {
+                let _ = tokio::fs::remove_file(&tmp_dest).await;
+                return Err(e.into());
+            }
+        }
+    }
+
     tokio::fs::rename(&tmp_dest, &dest).await?;
+    drop(_io_permit);
 
     if !is_text {
         return Ok(vec![]);
@@ -142,16 +177,10 @@ async fn download_with_retry(client: &Client, url: &str, max_retries: u32) -> Re
             }
             Err(e) => {
                 let delay = if is_emfile_error(&e) {
-                    tracing::debug!(
-                        "EMFILE on attempt {}/{} for {}, backing off",
-                        attempt + 1, max_retries + 1, url
-                    );
+                    tracing::debug!("EMFILE on attempt {}/{} for {}, backing off", attempt + 1, max_retries + 1, url);
                     std::time::Duration::from_secs(1 + attempt as u64)
                 } else {
-                    tracing::debug!(
-                        "Attempt {}/{} failed for {}: {}",
-                        attempt + 1, max_retries + 1, url, e
-                    );
+                    tracing::debug!("Attempt {}/{} failed for {}: {}", attempt + 1, max_retries + 1, url, e);
                     std::time::Duration::from_millis(500 * 2u64.pow(attempt))
                 };
                 if attempt < max_retries {
