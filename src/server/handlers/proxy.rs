@@ -19,7 +19,7 @@ pub async fn discord_api_proxy(State(state): State<AppState>, request: Request) 
         .map(|q| format!("?{}", q))
         .unwrap_or_default();
 
-    let url = format!("{}/api{}{}", state.config.discord_base_url, path, query);
+    let url = format!("{}/api{}{}", state.config.api_base_url, path, query);
 
     let method = request.method().clone();
     let req_headers = request.headers().clone();
@@ -31,17 +31,17 @@ pub async fn discord_api_proxy(State(state): State<AppState>, request: Request) 
 
     let mut builder = state.http_client.request(method, &url);
 
-    let discord_base = &state.config.discord_base_url;
+    let api_base = &state.config.api_base_url;
 
     for (name, value) in &req_headers {
         match name {
             &header::HOST | &header::CONNECTION | &header::TRANSFER_ENCODING => continue,
             &header::ORIGIN => {
-                builder = builder.header("origin", discord_base.as_str());
+                builder = builder.header("origin", api_base.as_str());
             }
             &header::REFERER => {
                 if let Ok(v) = value.to_str() {
-                    let rewritten = rewrite_origin(v, discord_base);
+                    let rewritten = rewrite_origin(v, api_base);
                     builder = builder.header("referer", rewritten);
                 }
             }

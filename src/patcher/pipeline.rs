@@ -86,7 +86,7 @@ impl PatchPipeline {
 
                 file_count += 1;
                 // Yield to runtime every 10 files to allow allocator to reclaim memory
-                if file_count % 10 == 0 {
+                if file_count.is_multiple_of(10) {
                     tokio::task::yield_now().await;
                 }
             }

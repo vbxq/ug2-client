@@ -125,7 +125,7 @@ pub async fn download_build(
         tracing::info!("Starting download for build {} ({} scripts)", build_hash, info.scripts.len());
 
         let downloader =
-            AssetDownloader::new(config.cache_path.clone(), &config.discord_base_url);
+            AssetDownloader::new(config.cache_path.clone(), &config.asset_base_url);
         match downloader
             .download_build(&build_hash, &info.scripts)
             .await
@@ -155,7 +155,7 @@ pub async fn download_build(
                     .unwrap_or_default()
                     .fixed_offset();
 
-                let global_env_db = if info.global_env.as_object().map_or(false, |m| m.is_empty()) {
+                let global_env_db = if info.global_env.as_object().is_some_and(|m| m.is_empty()) {
                     None
                 } else {
                     Some(info.global_env)
@@ -245,7 +245,7 @@ pub async fn fetch_current_build(State(state): State<AppState>) -> Response {
         );
 
         let downloader =
-            AssetDownloader::new(config.cache_path.clone(), &config.discord_base_url);
+            AssetDownloader::new(config.cache_path.clone(), &config.asset_base_url);
         match downloader
             .download_build(&build_hash, &live.scripts)
             .await

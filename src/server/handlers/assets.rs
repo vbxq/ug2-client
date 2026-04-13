@@ -27,7 +27,7 @@ pub async fn serve_asset(
     }
 
     // 2. Fallback: fetch from Discord, patch on the fly, save to disk for future streaming
-    let url = format!("{}/assets/{}", state.config.discord_base_url, asset_name);
+    let url = format!("{}/assets/{}", state.config.asset_base_url, asset_name);
     match state.http_client.get(&url).send().await {
         Ok(resp) if resp.status().is_success() => {
             if let Ok(bytes) = resp.bytes().await {

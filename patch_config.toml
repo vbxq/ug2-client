@@ -1,27 +1,22 @@
 [patches]
-# Branding patches, disable for testing with real Discord
 nitro_rebranding = true
 discord_rebranding = true
 title_rebranding = true
 server_to_guild = true
 
-# Infrastructure patches, disable for testing
-sentry_redirect = false
+sentry_redirect = true
 status_page_redirect = false
 
-# Functional patches
 prevent_localstorage_deletion = true
 fast_identify = true
 gateway_reconnect = true
 remove_qr_login = true
-enable_dev_experiments = true
+enable_dev_experiments = false
 remove_modals = true
 no_xss_warning = true
-# TODO: vencord integratio
 vencord = false
 
-# When enabled, proxies /api/* requests to Discord (avoids CORS in browsers).
-# Disable this when using an alternative backend on the same host.
+# Proxy API calls through ug2-client to our Underground API
 api_proxy = true
 
 [server]
@@ -31,8 +26,17 @@ rate_limit_requests = 60
 rate_limit_window_secs = 60
 
 [branding]
-instance_name = "Discord"
-instance_url = "https://canary.discord.com"
-gateway_url = "wss://gateway.discord.gg"
+#instance_name = "Underground"
+#instance_url = "https://thu-cnet-persons-cooling.trycloudflare.com"
+#gateway_url = "wss://andrews-food-nirvana-metro.trycloudflare.com"
+#sentry_url = "https://sentry.io"
+#status_url = "status.discord.com"
+
+instance_name = "Underground"
+instance_url = "http://localhost:5002"
+gateway_url = "ws://localhost:5001"
+cdn_url = "https://cdn.celeste.gg"
+#instance_url = "https://discord.com"
+#gateway_url = "wss://gateway.discord.gg"
 sentry_url = "https://sentry.io"
 status_url = "status.discord.com"

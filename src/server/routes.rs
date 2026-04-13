@@ -28,7 +28,10 @@ pub fn build_router(state: AppState) -> Router {
         );
 
     if api_proxy {
-        tracing::info!("API proxy enabled — /api/* will be forwarded to {}", state.config.discord_base_url);
+        tracing::info!(
+            "API proxy enabled — /api/* will be forwarded to {}",
+            state.config.api_base_url
+        );
         api_router = api_router.fallback(handlers::proxy::discord_api_proxy);
     }
 

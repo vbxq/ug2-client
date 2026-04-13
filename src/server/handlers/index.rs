@@ -52,7 +52,7 @@ fn generate_index(
     branding: &BrandingConfig,
     patches: &crate::config::PatchToggles,
 ) -> String {
-    let global_env_js = generate_global_env(branding, build_hash);
+    let global_env_js = generate_global_env(branding, patches, build_hash);
 
     let css_tags: String = scripts
         .iter()
@@ -146,20 +146,38 @@ fn generate_index(
     )
 }
 
-fn generate_global_env(branding: &BrandingConfig, build_hash: &str) -> String {
+fn generate_global_env(
+    branding: &BrandingConfig,
+    patches: &crate::config::PatchToggles,
+    build_hash: &str,
+) -> String {
     let gateway_expr = if let Some(ref gw) = branding.gateway_url {
         format!(r#""{}""#, gw)
     } else {
         r#"`${location.protocol === "https:" ? "wss://" : "ws://"}${location.host}`"#.to_string()
     };
+    let api_endpoint_expr = if patches.api_proxy {
+        r#"`//${location.host}/api`"#.to_string()
+    } else {
+        serde_json::to_string(&format!(
+            "{}/api",
+            branding.instance_url.trim_end_matches('/')
+        ))
+        .unwrap()
+    };
+    let cdn_host = branding
+        .cdn_url
+        .as_deref()
+        .and_then(extract_host)
+        .unwrap_or("cdn.discordapp.com");
 
     format!(
         r#"        window.GLOBAL_ENV = {{
-            API_ENDPOINT: `//${{location.host}}/api`,
+            API_ENDPOINT: {api_endpoint},
             API_VERSION: 9,
             GATEWAY_ENDPOINT: {gateway},
             WEBAPP_ENDPOINT: `//${{location.host}}`,
-            CDN_HOST: "cdn.discordapp.com",
+            CDN_HOST: "{cdn_host}",
             ASSET_ENDPOINT: `//${{location.host}}`,
             PUBLIC_PATH: "/assets/",
             MEDIA_PROXY_ENDPOINT: "https://media.discordapp.net",
@@ -182,9 +200,24 @@ fn generate_global_env(branding: &BrandingConfig, build_hash: &str) -> String {
             HTML_TIMESTAMP: Date.now(),
             ALGOLIA_KEY: "aca0d7082e4e63af5ba5917d5e96bed0"
         }};"#,
+        api_endpoint = api_endpoint_expr,
         gateway = gateway_expr,
+        cdn_host = cdn_host,
         build_hash = build_hash,
     )
+}
+
+fn extract_host(url: &str) -> Option<&str> {
+    let without_scheme = url
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(url);
+    let host = without_scheme.split('/').next()?.trim();
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
 }
 
 fn html_escape(s: &str) -> String {

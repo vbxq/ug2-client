@@ -1,6 +1,7 @@
 use super::extractor;
 use anyhow::Result;
 use bytes::Bytes;
+use futures::stream::{self, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
 use std::collections::HashSet;
@@ -8,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-const MAX_CONCURRENT: usize = 64;
-const MAX_FILE_IO: usize = 16;
+const MAX_CONCURRENT: usize = 24;
+const MAX_FILE_IO: usize = 12;
 const MAX_RETRIES: u32 = 3;
 
 pub struct AssetDownloader {
@@ -56,35 +57,39 @@ impl AssetDownloader {
         while !queue.is_empty() {
             pb.set_message(format!("{}", queue.len()));
 
-            let batch: Vec<String> = queue.drain(..).collect();
-            let mut handles = Vec::new();
-
+            let batch: Vec<String> = std::mem::take(&mut queue);
+            let mut deduped: Vec<String> = Vec::new();
             for asset_name in batch {
                 let asset_name = if asset_name.contains('.') {
                     asset_name
                 } else {
                     format!("{}.js", asset_name)
                 };
-
-                if !known_assets.insert(asset_name.clone()) {
-                    continue;
+                if known_assets.insert(asset_name.clone()) {
+                    deduped.push(asset_name);
                 }
-
-                let client = self.client.clone();
-                let base_url = self.base_url.clone();
-                let build_dir = build_dir.clone();
-                let sem = self.semaphore.clone();
-                let io_sem = self.io_semaphore.clone();
-
-                handles.push(tokio::spawn(async move {
-                    let _permit = sem.acquire().await.unwrap();
-                    let result = download_single_asset(&client, &base_url, &asset_name, &build_dir, io_sem).await;
-                    (asset_name, result)
-                }));
             }
 
-            for handle in handles {
-                let (asset_name, result) = handle.await?;
+            let results: Vec<(String, Result<Vec<String>>)> = stream::iter(deduped)
+                .map(|asset_name| {
+                    let client = self.client.clone();
+                    let base_url = self.base_url.clone();
+                    let build_dir = build_dir.clone();
+                    let sem = self.semaphore.clone();
+                    let io_sem = self.io_semaphore.clone();
+                    async move {
+                        let _permit = sem.acquire().await.unwrap();
+                        let result = download_single_asset(
+                            &client, &base_url, &asset_name, &build_dir, io_sem,
+                        ).await;
+                        (asset_name, result)
+                    }
+                })
+                .buffer_unordered(MAX_CONCURRENT)
+                .collect()
+                .await;
+
+            for (asset_name, result) in results {
                 match result {
                     Ok(new_refs) => {
                         downloaded.push(asset_name);

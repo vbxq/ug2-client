@@ -123,7 +123,7 @@ async fn run_import(config: &config::AppConfig, data_dir: Option<&str>) -> Resul
                                     .unwrap_or_default()
                                     .fixed_offset();
 
-                                let global_env_db = if build_data.global_env.as_object().map_or(false, |m| m.is_empty()) {
+                                let global_env_db = if build_data.global_env.as_object().is_some_and(|m| m.is_empty()) {
                                     None
                                 } else {
                                     Some(info.global_env)
@@ -177,7 +177,7 @@ async fn run_import(config: &config::AppConfig, data_dir: Option<&str>) -> Resul
         }
 
         let processed = imported + errors;
-        if processed % 500 == 0 {
+        if processed.is_multiple_of(500) {
             tracing::info!(
                 "Progress: {}/{} ({} imported, {} errors)",
                 processed, total, imported, errors

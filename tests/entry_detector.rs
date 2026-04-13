@@ -97,3 +97,56 @@ fn test_deferred_deps_multiple() {
         .collect();
     assert_eq!(deps, vec![40532, 56054]);
 }
+
+#[test]
+fn test_detect_entry_scripts_prefers_web_runtime_and_stylesheet() {
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("ug2-entry-detector-{unique}"));
+    fs::create_dir_all(&dir).unwrap();
+
+    fs::write(
+        dir.join("0027f6d9a044f97e.js"),
+        r#""use strict";(this.webpackChunkdiscord_app=this.webpackChunkdiscord_app||[]).push([[["25972"]],{1:()=>{}}]);"#,
+    )
+    .unwrap();
+    fs::write(
+        dir.join("web.test.css"),
+        "body { background: #000; }",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("sentry.test.js"),
+        "(()=>{window.DiscordSentry={boot:true}})();",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("web.test.js"),
+        "(()=>{var __webpack_modules__={};var __webpack_exports__=__webpack_require__(123);__webpack_exports__=__webpack_require__.O(__webpack_exports__)})();",
+    )
+    .unwrap();
+
+    let ordered = vec![
+        "/assets/0027f6d9a044f97e.js".to_string(),
+        "/assets/web.test.css".to_string(),
+        "/assets/sentry.test.js".to_string(),
+        "/assets/web.test.js".to_string(),
+    ];
+
+    let detected = detect_entry_scripts(&dir, &ordered);
+    assert_eq!(
+        detected,
+        vec![
+            "/assets/web.test.css".to_string(),
+            "/assets/sentry.test.js".to_string(),
+            "/assets/web.test.js".to_string(),
+        ]
+    );
+
+    fs::remove_dir_all(dir).unwrap();
+}

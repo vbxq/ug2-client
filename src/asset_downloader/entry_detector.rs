@@ -39,25 +39,33 @@ pub static DEFERRED_DEPS_RE: LazyLock<Regex> = LazyLock::new(|| {
 pub fn detect_entry_scripts(build_dir: &Path, ordered_scripts: &[String]) -> Vec<String> {
     let mut included: HashSet<usize> = HashSet::new();
     let mut required_chunk_ids: HashSet<u64> = HashSet::new();
-
-    if !ordered_scripts.is_empty() {
-        included.insert(0);
-    }
-
-    let scan_limit = ordered_scripts.len().min(30);
     let mut chunk_id_map: Vec<(usize, Vec<u64>)> = Vec::new();
+    let mut web_style_indices: Vec<usize> = Vec::new();
+    let scan_limit = ordered_scripts.len().min(30);
 
-    for (i, script) in ordered_scripts.iter().enumerate().skip(1).take(scan_limit - 1) {
+    for (i, script) in ordered_scripts.iter().enumerate() {
         let filename = script.trim_start_matches("/assets/");
-        let path = build_dir.join(filename);
 
+        if is_primary_stylesheet(filename) {
+            web_style_indices.push(i);
+            continue;
+        }
+
+        let should_scan = i < scan_limit || is_runtime_candidate(filename);
+        if !should_scan {
+            continue;
+        }
+
+        let path = build_dir.join(filename);
         let content = match std::fs::read_to_string(&path) {
             Ok(c) => c,
             Err(_) => continue,
         };
 
         if !is_webpack_chunk(&content) {
-            included.insert(i);
+            if is_runtime_candidate(filename) || looks_like_runtime_bootstrap(&content) {
+                included.insert(i);
+            }
             continue;
         }
 
@@ -97,6 +105,14 @@ pub fn detect_entry_scripts(build_dir: &Path, ordered_scripts: &[String]) -> Vec
         }
     }
 
+    if included.iter().any(|idx| {
+        ordered_scripts[*idx]
+            .trim_start_matches("/assets/")
+            .starts_with("web.")
+    }) {
+        included.extend(web_style_indices);
+    }
+
     let mut indices: Vec<usize> = included.into_iter().collect();
     indices.sort();
     let result: Vec<String> = indices
@@ -105,6 +121,25 @@ pub fn detect_entry_scripts(build_dir: &Path, ordered_scripts: &[String]) -> Vec
         .collect();
 
     if result.is_empty() {
+        let fallback: Vec<String> = ordered_scripts
+            .iter()
+            .filter(|script| {
+                let filename = script.trim_start_matches("/assets/");
+                is_primary_stylesheet(filename)
+                    || filename.starts_with("web.") && filename.ends_with(".js")
+                    || filename.starts_with("sentry.") && filename.ends_with(".js")
+            })
+            .cloned()
+            .collect();
+
+        if !fallback.is_empty() {
+            tracing::warn!(
+                "Entry detection missed the bootstrap script — using web/sentry fallback: {:?}",
+                fallback
+            );
+            return fallback;
+        }
+
         tracing::warn!("Could not detect any entry scripts — falling back to first script");
         return ordered_scripts.iter().take(1).cloned().collect();
     }
@@ -136,6 +171,20 @@ pub fn extract_chunk_ids(content: &str) -> Vec<u64> {
         }
     }
     Vec::new()
+}
+
+fn is_runtime_candidate(filename: &str) -> bool {
+    (filename.starts_with("web.") || filename.starts_with("sentry."))
+        && filename.ends_with(".js")
+}
+
+fn is_primary_stylesheet(filename: &str) -> bool {
+    filename.starts_with("web.") && filename.ends_with(".css")
+}
+
+fn looks_like_runtime_bootstrap(content: &str) -> bool {
+    let head = safe_slice_start(content, 1500);
+    head.contains("var __webpack_modules__=") || head.contains("window.DiscordSentry=")
 }
 
 pub fn has_entry_factory(tail: &str) -> bool {
