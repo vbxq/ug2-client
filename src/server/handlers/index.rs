@@ -169,7 +169,7 @@ fn generate_global_env(
         .cdn_url
         .as_deref()
         .and_then(extract_host)
-        .unwrap_or("cdn.discordapp.com");
+        .unwrap_or("cdn.celeste.gg");
 
     format!(
         r#"        window.GLOBAL_ENV = {{
