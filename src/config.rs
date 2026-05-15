@@ -60,6 +60,8 @@ pub struct PatchToggles {
     pub no_xss_warning: bool,
     pub vencord: bool,
     pub api_proxy: bool,
+    #[serde(default)]
+    pub cdn_redirect: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -70,6 +72,20 @@ pub struct BrandingConfig {
     pub status_url: String,
     pub gateway_url: Option<String>,
     pub cdn_url: Option<String>,
+    pub media_proxy_url: Option<String>,
+}
+
+pub fn extract_host(url: &str) -> Option<&str> {
+    let without_scheme = url
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(url);
+    let host = without_scheme.split('/').next()?.trim();
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
 }
 
 impl AppConfig {
@@ -146,6 +162,7 @@ mod tests {
             status_url: "https://status.discord.com".into(),
             gateway_url: Some("ws://localhost:5001".into()),
             cdn_url: cdn_url.map(str::to_string),
+            media_proxy_url: None,
         }
     }
 

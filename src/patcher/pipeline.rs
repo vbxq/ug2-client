@@ -35,6 +35,17 @@ impl PatchPipeline {
         if config.patches.status_page_redirect {
             pipeline.patches.push(Box::new(patches::infrastructure::StatusPageRedirect::new(&config.branding.status_url)));
         }
+        if config.patches.cdn_redirect {
+            let cdn_host = config.branding.cdn_url
+                .as_deref()
+                .and_then(crate::config::extract_host)
+                .unwrap_or("cdn.discordapp.com");
+            let media_host = config.branding.media_proxy_url
+                .as_deref()
+                .and_then(crate::config::extract_host)
+                .unwrap_or("media.discordapp.net");
+            pipeline.patches.push(Box::new(patches::infrastructure::CdnRedirect::new(cdn_host, media_host)));
+        }
         if config.patches.prevent_localstorage_deletion {
             pipeline.patches.push(Box::new(patches::features::PreventLocalStorageDeletion));
         }

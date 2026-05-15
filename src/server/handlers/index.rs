@@ -1,4 +1,4 @@
-use crate::config::BrandingConfig;
+use crate::config::{extract_host, BrandingConfig};
 use crate::server::state::AppState;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -170,6 +170,10 @@ fn generate_global_env(
         .as_deref()
         .and_then(extract_host)
         .unwrap_or("cdn.celeste.gg");
+    let media_proxy_endpoint = branding
+        .media_proxy_url
+        .as_deref()
+        .unwrap_or("https://media.discordapp.net");
 
     format!(
         r#"        window.GLOBAL_ENV = {{
@@ -180,7 +184,7 @@ fn generate_global_env(
             CDN_HOST: "{cdn_host}",
             ASSET_ENDPOINT: `//${{location.host}}`,
             PUBLIC_PATH: "/assets/",
-            MEDIA_PROXY_ENDPOINT: "https://media.discordapp.net",
+            MEDIA_PROXY_ENDPOINT: "{media_proxy_endpoint}",
             WIDGET_ENDPOINT: `//${{location.host}}/widget`,
             INVITE_HOST: `${{location.host}}/invite`,
             GUILD_TEMPLATE_HOST: `${{location.host}}/template`,
@@ -203,21 +207,9 @@ fn generate_global_env(
         api_endpoint = api_endpoint_expr,
         gateway = gateway_expr,
         cdn_host = cdn_host,
+        media_proxy_endpoint = media_proxy_endpoint,
         build_hash = build_hash,
     )
-}
-
-fn extract_host(url: &str) -> Option<&str> {
-    let without_scheme = url
-        .split_once("://")
-        .map(|(_, rest)| rest)
-        .unwrap_or(url);
-    let host = without_scheme.split('/').next()?.trim();
-    if host.is_empty() {
-        None
-    } else {
-        Some(host)
-    }
 }
 
 fn html_escape(s: &str) -> String {

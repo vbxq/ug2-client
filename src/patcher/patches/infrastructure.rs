@@ -47,3 +47,37 @@ impl Patch for StatusPageRedirect {
             .replace("discordstatus.com", &self.target_url)
     }
 }
+
+pub struct CdnRedirect {
+    cdn_host: String,
+    media_host: String,
+}
+
+impl CdnRedirect {
+    pub fn new(cdn_host: &str, media_host: &str) -> Self {
+        Self {
+            cdn_host: cdn_host.to_string(),
+            media_host: media_host.to_string(),
+        }
+    }
+}
+
+impl Patch for CdnRedirect {
+    fn name(&self) -> &str { "cdn_redirect" }
+
+    fn apply(&self, content: String) -> String {
+        let rewrite_cdn = self.cdn_host != "cdn.discordapp.com" && content.contains("cdn.discordapp.com");
+        let rewrite_media = self.media_host != "media.discordapp.net" && content.contains("media.discordapp.net");
+        if !rewrite_cdn && !rewrite_media {
+            return content;
+        }
+        let mut result = content;
+        if rewrite_cdn {
+            result = result.replace("cdn.discordapp.com", &self.cdn_host);
+        }
+        if rewrite_media {
+            result = result.replace("media.discordapp.net", &self.media_host);
+        }
+        result
+    }
+}
