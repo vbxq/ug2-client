@@ -20,11 +20,6 @@ struct BuildSummary {
     build_date: chrono::DateTime<chrono::FixedOffset>,
 }
 
-#[derive(Debug, FromQueryResult)]
-struct ScriptsOnly {
-    scripts: serde_json::Value,
-}
-
 #[derive(Deserialize)]
 pub struct DownloadRequest {
     pub build_hash: Option<String>,
@@ -460,21 +455,8 @@ pub async fn repatch_build(
     }
 
     let pipeline = state.pipeline.clone();
-    let db = state.db.clone();
     let mut redis = state.redis.clone();
     let hash = build_hash.clone();
-
-    let scripts: Vec<String> = match discord_build::Entity::find()
-        .select_only()
-        .column(discord_build::Column::Scripts)
-        .filter(discord_build::Column::BuildHash.eq(&build_hash))
-        .into_model::<ScriptsOnly>()
-        .one(&state.db)
-        .await
-    {
-        Ok(Some(row)) => serde_json::from_value(row.scripts).unwrap_or_default(),
-        _ => Vec::new(),
-    };
 
     let _ = redis_cache::invalidate_builds_cache(&mut redis).await;
 
@@ -482,20 +464,6 @@ pub async fn repatch_build(
         match pipeline.patch_build(&build_dir).await {
             Ok(count) => tracing::info!("Repatched {} files for build {}", count, hash),
             Err(e) => tracing::error!("Repatching failed: {}", e),
-        }
-
-        if !scripts.is_empty() {
-            let index_scripts =
-                crate::asset_downloader::detect_entry_scripts(&build_dir, &scripts);
-
-            let _ = discord_build::Entity::update_many()
-                .col_expr(
-                    discord_build::Column::IndexScripts,
-                    Expr::value(serde_json::to_value(&index_scripts).unwrap()),
-                )
-                .filter(discord_build::Column::BuildHash.eq(&hash))
-                .exec(&db)
-                .await;
         }
     });
 

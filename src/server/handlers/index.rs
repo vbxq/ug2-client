@@ -1,4 +1,4 @@
-use crate::config::{extract_host, BrandingConfig};
+use crate::config::{extract_host, BrandingConfig, DEFAULT_CDN_BYPASS_PATHS};
 use crate::server::state::AppState;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -53,6 +53,11 @@ fn generate_index(
     patches: &crate::config::PatchToggles,
 ) -> String {
     let global_env_js = generate_global_env(branding, patches, build_hash);
+    let cdn_bypass_shim = if patches.cdn_bypass {
+        generate_cdn_bypass_shim(branding)
+    } else {
+        String::new()
+    };
 
     let css_tags: String = scripts
         .iter()
@@ -94,7 +99,7 @@ fn generate_index(
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
-
+{cdn_bypass_shim}
     <script>
         // Intercept XHR & fetch: Discord forces https: on API endpoints,
         // but our server runs on HTTP. Rewrite same-host https -> http.
@@ -138,12 +143,95 @@ fn generate_index(
 
 </html>"#,
         title = branding.instance_name,
+        cdn_bypass_shim = cdn_bypass_shim,
         global_env = global_env_js,
         css_tags = css_tags,
         fast_identify = fast_identify_js,
         script_tags = script_tags,
         dev_experiments = dev_experiments_js,
     )
+}
+
+fn generate_cdn_bypass_shim(branding: &BrandingConfig) -> String {
+    let mut mappings: Vec<(&str, &str)> = Vec::new();
+    if let Some(host) = branding.cdn_url.as_deref().and_then(extract_host) {
+        if host != "cdn.discordapp.com" {
+            mappings.push((host, "cdn.discordapp.com"));
+        }
+    }
+    if let Some(host) = branding.media_proxy_url.as_deref().and_then(extract_host) {
+        if host != "media.discordapp.net" {
+            mappings.push((host, "media.discordapp.net"));
+        }
+    }
+    if mappings.is_empty() {
+        return String::new();
+    }
+
+    let paths: Vec<&str> = match &branding.cdn_bypass_paths {
+        Some(p) => p.iter().map(String::as_str).collect(),
+        None => DEFAULT_CDN_BYPASS_PATHS.to_vec(),
+    };
+
+    let mappings_json = serde_json::to_string(&mappings).expect("serialize mappings");
+    let paths_json = serde_json::to_string(&paths).expect("serialize paths");
+
+    format!(r#"    <script>
+        // cdn_bypass: route Discord-metadata paths back to discord.com instead of our CDN,
+        // celeste does (attachments, emojis, etc.) and 404s/blocks CORS on Discord's global metadata.
+        (function() {{
+            var mappings = {mappings_json};
+            var bypassPaths = {paths_json};
+            function rewrite(url) {{
+                if (typeof url !== "string") return url;
+                for (var i = 0; i < mappings.length; i++) {{
+                    var host = mappings[i][0], fallback = mappings[i][1];
+                    var prefixes = ["https://" + host, "http://" + host, "//" + host];
+                    for (var j = 0; j < prefixes.length; j++) {{
+                        if (url.indexOf(prefixes[j]) === 0) {{
+                            var path = url.substring(prefixes[j].length);
+                            for (var k = 0; k < bypassPaths.length; k++) {{
+                                if (path.indexOf(bypassPaths[k]) === 0) {{
+                                    return url.replace(host, fallback);
+                                }}
+                            }}
+                            return url;
+                        }}
+                    }}
+                }}
+                return url;
+            }}
+            var xOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function() {{
+                arguments[1] = rewrite(arguments[1]);
+                return xOpen.apply(this, arguments);
+            }};
+            var oFetch = window.fetch;
+            window.fetch = function(input, init) {{
+                if (typeof input === "string") {{
+                    return oFetch.call(this, rewrite(input), init);
+                }}
+                if (input && typeof input.url === "string") {{
+                    var newUrl = rewrite(input.url);
+                    if (newUrl !== input.url) {{
+                        return oFetch.call(this, new Request(newUrl, input), init);
+                    }}
+                }}
+                return oFetch.call(this, input, init);
+            }};
+            try {{
+                var origSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
+                if (origSrc && origSrc.set) {{
+                    Object.defineProperty(HTMLImageElement.prototype, "src", {{
+                        get: origSrc.get,
+                        set: function(v) {{ origSrc.set.call(this, rewrite(v)); }},
+                        configurable: true,
+                        enumerable: true
+                    }});
+                }}
+            }} catch (e) {{}}
+        }})();
+    </script>"#)
 }
 
 fn generate_global_env(

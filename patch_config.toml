@@ -22,6 +22,10 @@ api_proxy = true
 # Rewrite hardcoded cdn.discordapp.com / media.discordapp.net references in JS bundles
 cdn_redirect = true
 
+# Inject runtime JS shim that re-routes Discord-only metadata paths back to discord.com
+# (the custom CDN doesn't proxy /assets/, /detectables/, /changelogs/, etc.)
+cdn_bypass = true
+
 [server]
 trust_proxy_headers = false
 rate_limit_enabled = false

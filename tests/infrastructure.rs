@@ -18,7 +18,7 @@ fn test_status_redirect() {
 
 #[test]
 fn test_cdn_redirect_rewrites_hosts() {
-    let patch = CdnRedirect::new("cdn.celeste.gg", "media.celeste.gg");
+    let patch = CdnRedirect::new("cdn.celeste.gg", "media.celeste.gg", vec![]);
     let input = "fetch(\"https://cdn.discordapp.com/attachments/x.png\");src=\"//media.discordapp.net/y.jpg\";";
     let expected = "fetch(\"https://cdn.celeste.gg/attachments/x.png\");src=\"//media.celeste.gg/y.jpg\";";
     assert_eq!(patch.apply(input.into()), expected);
@@ -26,15 +26,45 @@ fn test_cdn_redirect_rewrites_hosts() {
 
 #[test]
 fn test_cdn_redirect_noop_when_hosts_unchanged() {
-    let patch = CdnRedirect::new("cdn.discordapp.com", "media.discordapp.net");
+    let patch = CdnRedirect::new("cdn.discordapp.com", "media.discordapp.net", vec![]);
     let input = "https://cdn.discordapp.com/x";
     assert_eq!(patch.apply(input.into()), input);
 }
 
 #[test]
 fn test_cdn_redirect_only_replaces_configured_hosts() {
-    let patch = CdnRedirect::new("cdn.celeste.gg", "media.discordapp.net");
+    let patch = CdnRedirect::new("cdn.celeste.gg", "media.discordapp.net", vec![]);
     let input = "https://cdn.discordapp.com/a https://media.discordapp.net/b";
     let expected = "https://cdn.celeste.gg/a https://media.discordapp.net/b";
+    assert_eq!(patch.apply(input.into()), expected);
+}
+
+#[test]
+fn test_cdn_redirect_preserves_bypass_paths() {
+    let bypass = vec!["/assets/".to_string(), "/detectables/".to_string()];
+    let patch = CdnRedirect::new("cdn.celeste.gg", "media.celeste.gg", bypass);
+    let input = concat!(
+        "https://cdn.discordapp.com/attachments/x.png ",
+        "https://cdn.discordapp.com/assets/y.png ",
+        "https://cdn.discordapp.com/detectables/games.json ",
+        "https://media.discordapp.net/external/foo ",
+        "https://media.discordapp.net/assets/bar.png"
+    );
+    let expected = concat!(
+        "https://cdn.celeste.gg/attachments/x.png ",
+        "https://cdn.discordapp.com/assets/y.png ",
+        "https://cdn.discordapp.com/detectables/games.json ",
+        "https://media.celeste.gg/external/foo ",
+        "https://media.discordapp.net/assets/bar.png"
+    );
+    assert_eq!(patch.apply(input.into()), expected);
+}
+
+#[test]
+fn test_cdn_redirect_reapplies_correctly_on_already_patched_content() {
+    let bypass = vec!["/assets/".to_string()];
+    let patch = CdnRedirect::new("cdn.celeste.gg", "media.celeste.gg", bypass);
+    let input = "https://cdn.celeste.gg/attachments/x.png https://cdn.celeste.gg/assets/y.png";
+    let expected = "https://cdn.celeste.gg/attachments/x.png https://cdn.discordapp.com/assets/y.png";
     assert_eq!(patch.apply(input.into()), expected);
 }

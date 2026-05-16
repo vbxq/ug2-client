@@ -62,6 +62,8 @@ pub struct PatchToggles {
     pub api_proxy: bool,
     #[serde(default)]
     pub cdn_redirect: bool,
+    #[serde(default)]
+    pub cdn_bypass: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -73,7 +75,26 @@ pub struct BrandingConfig {
     pub gateway_url: Option<String>,
     pub cdn_url: Option<String>,
     pub media_proxy_url: Option<String>,
+    pub cdn_bypass_paths: Option<Vec<String>>,
 }
+
+pub const DEFAULT_CDN_BYPASS_PATHS: &[&str] = &[
+    "/assets/",
+    "/detectables/",
+    "/changelogs/",
+    "/badge-icons/",
+    "/discovery-splashes/",
+    "/hot-spots/",
+    "/embed/",
+    "/avatar-decoration-presets/",
+    "/clyde-ai/",
+    "/quests/",
+    "/build_overrides/",
+    "/streamer-mode-blocked-words/",
+    "/app-assets/",
+    "/app-icons/",
+    "/bad-domains/",
+];
 
 pub fn extract_host(url: &str) -> Option<&str> {
     let without_scheme = url
@@ -163,6 +184,7 @@ mod tests {
             gateway_url: Some("ws://localhost:5001".into()),
             cdn_url: cdn_url.map(str::to_string),
             media_proxy_url: None,
+            cdn_bypass_paths: None,
         }
     }
 

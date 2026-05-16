@@ -36,6 +36,10 @@ pub static DEFERRED_DEPS_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\.O\(\s*(?:0|void 0)\s*,\s*\[(\d+(?:\s*,\s*\d+)*)\]").unwrap()
 });
 
+static NEW_O_CALL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\w+\s*=\s*\w+\.O\(").unwrap()
+});
+
 pub fn detect_entry_scripts(build_dir: &Path, ordered_scripts: &[String]) -> Vec<String> {
     let mut included: HashSet<usize> = HashSet::new();
     let mut required_chunk_ids: HashSet<u64> = HashSet::new();
@@ -195,13 +199,20 @@ pub fn has_entry_factory(tail: &str) -> bool {
     };
 
     let trimmed = code.trim_end();
-    if !trimmed.ends_with("]);") {
+    let ends_correctly = trimmed.ends_with("]);")
+        || trimmed.ends_with("})();")
+        || trimmed.ends_with("}());");
+    if !ends_correctly {
         return false;
     }
 
     let check_region = safe_slice_end(trimmed, 500);
 
     if DEFERRED_DEPS_RE.is_match(check_region) {
+        return true;
+    }
+
+    if NEW_O_CALL_RE.is_match(check_region) {
         return true;
     }
 

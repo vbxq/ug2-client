@@ -51,13 +51,15 @@ impl Patch for StatusPageRedirect {
 pub struct CdnRedirect {
     cdn_host: String,
     media_host: String,
+    bypass_paths: Vec<String>,
 }
 
 impl CdnRedirect {
-    pub fn new(cdn_host: &str, media_host: &str) -> Self {
+    pub fn new(cdn_host: &str, media_host: &str, bypass_paths: Vec<String>) -> Self {
         Self {
             cdn_host: cdn_host.to_string(),
             media_host: media_host.to_string(),
+            bypass_paths,
         }
     }
 }
@@ -66,17 +68,35 @@ impl Patch for CdnRedirect {
     fn name(&self) -> &str { "cdn_redirect" }
 
     fn apply(&self, content: String) -> String {
-        let rewrite_cdn = self.cdn_host != "cdn.discordapp.com" && content.contains("cdn.discordapp.com");
-        let rewrite_media = self.media_host != "media.discordapp.net" && content.contains("media.discordapp.net");
-        if !rewrite_cdn && !rewrite_media {
+        let cdn_custom = self.cdn_host != "cdn.discordapp.com";
+        let media_custom = self.media_host != "media.discordapp.net";
+        if !cdn_custom && !media_custom {
             return content;
         }
         let mut result = content;
-        if rewrite_cdn {
-            result = result.replace("cdn.discordapp.com", &self.cdn_host);
+        if cdn_custom {
+            if result.contains("cdn.discordapp.com") {
+                result = result.replace("cdn.discordapp.com", &self.cdn_host);
+            }
+            for path in &self.bypass_paths {
+                let custom = format!("{}{}", self.cdn_host, path);
+                let original = format!("cdn.discordapp.com{}", path);
+                if result.contains(&custom) {
+                    result = result.replace(&custom, &original);
+                }
+            }
         }
-        if rewrite_media {
-            result = result.replace("media.discordapp.net", &self.media_host);
+        if media_custom {
+            if result.contains("media.discordapp.net") {
+                result = result.replace("media.discordapp.net", &self.media_host);
+            }
+            for path in &self.bypass_paths {
+                let custom = format!("{}{}", self.media_host, path);
+                let original = format!("media.discordapp.net{}", path);
+                if result.contains(&custom) {
+                    result = result.replace(&custom, &original);
+                }
+            }
         }
         result
     }

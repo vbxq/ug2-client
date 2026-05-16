@@ -44,7 +44,14 @@ impl PatchPipeline {
                 .as_deref()
                 .and_then(crate::config::extract_host)
                 .unwrap_or("media.discordapp.net");
-            pipeline.patches.push(Box::new(patches::infrastructure::CdnRedirect::new(cdn_host, media_host)));
+            let bypass_paths: Vec<String> = match &config.branding.cdn_bypass_paths {
+                Some(p) => p.clone(),
+                None => crate::config::DEFAULT_CDN_BYPASS_PATHS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+            };
+            pipeline.patches.push(Box::new(patches::infrastructure::CdnRedirect::new(cdn_host, media_host, bypass_paths)));
         }
         if config.patches.prevent_localstorage_deletion {
             pipeline.patches.push(Box::new(patches::features::PreventLocalStorageDeletion));
